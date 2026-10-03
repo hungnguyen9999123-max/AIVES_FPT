@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 
-$baseDir = "e:\KTPM\kì 7\swd\AIVES_FPT"
+$baseDir = $PSScriptRoot
 cd $baseDir
 
 Write-Host "Creating Monorepo Root files..."
