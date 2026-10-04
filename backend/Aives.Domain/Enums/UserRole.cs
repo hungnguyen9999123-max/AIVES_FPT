@@ -1,8 +1,9 @@
-namespace Aives.Domain.Enums;
-
-public enum UserRole
+namespace Aives.Domain.Enums
 {
-    ADMIN,
-    TEACHER,
-    STUDENT
+    public enum UserRole
+    {
+        ADMIN,
+        STUDENT,
+        TEACHER
+    }
 }

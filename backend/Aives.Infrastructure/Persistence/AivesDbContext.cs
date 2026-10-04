@@ -398,7 +398,9 @@ public partial class AivesDbContext : DbContext
             entity.Property(e => e.PasswordHash)
                 .HasMaxLength(255)
                 .HasColumnName("password_hash");
-            entity.Property(e => e.Role).HasColumnName("role");
+            entity.Property(e => e.Role)
+                .HasColumnName("role")
+                .HasColumnType("user_role");
             entity.Property(e => e.Username)
                 .HasMaxLength(50)
                 .HasColumnName("username");
