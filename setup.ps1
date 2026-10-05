@@ -1,4 +1,4 @@
-$ErrorActionPreference = "Stop"
+``$ErrorActionPreference = "Stop"
 
 $baseDir = $PSScriptRoot
 cd $baseDir
@@ -16,7 +16,7 @@ bin/
 obj/
 
 venv/
-.venv/
+.venv/````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````
 __pycache__/
 
 .vs/
