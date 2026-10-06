@@ -60,13 +60,12 @@ class ScoringService:
         document_context = _build_document_context(request.documents)
         qa = request.question_answer
 
-        system_prompt = _SCORING_PROMPT_TEMPLATE.format(
-            course_name=request.course_name,
-            document_context=document_context,
-            question_text=qa.question_text,
-            student_answer=qa.student_answer,
-            max_score=request.max_score,
-        )
+        system_prompt = _SCORING_PROMPT_TEMPLATE
+        system_prompt = system_prompt.replace("{course_name}", request.course_name)
+        system_prompt = system_prompt.replace("{document_context}", document_context)
+        system_prompt = system_prompt.replace("{question_text}", qa.question_text)
+        system_prompt = system_prompt.replace("{student_answer}", qa.student_answer)
+        system_prompt = system_prompt.replace("{max_score}", str(request.max_score))
 
         user_message = (
             f"Hãy chấm điểm câu trả lời của sinh viên cho câu hỏi này "

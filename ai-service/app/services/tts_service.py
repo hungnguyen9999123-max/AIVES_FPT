@@ -43,6 +43,8 @@ class TextToSpeechService:
             return await self._synthesize_google(request)
         elif self.provider == "openai_tts":
             return await self._synthesize_openai(request)
+        elif self.provider == "edge_tts":
+            return await self._synthesize_edge_tts(request)
         else:
             return await self._synthesize_mock(request)
 
@@ -58,6 +60,29 @@ class TextToSpeechService:
             audio_format="wav",
             duration_seconds=0.0,
             message="Mock TTS: configure TTS_PROVIDER=google or openai_tts for real audio.",
+        )
+
+    # ── Edge TTS (free, Vietnamese supported) ─────────────
+    async def _synthesize_edge_tts(self, request: TextToSpeechRequest) -> TextToSpeechResponse:
+        """
+        Microsoft Edge TTS (free, no API key).
+        Default voice: vi-VN-HoaiMyNeural.
+        Requires TTS_PROVIDER=edge_tts.
+        """
+        import edge_tts
+
+        voice = request.voice or "vi-VN-HoaiMyNeural"
+        communicate = edge_tts.Communicate(request.text, voice)
+        audio_chunks = bytearray()
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                audio_chunks.extend(chunk["data"])
+
+        audio_b64 = base64.b64encode(bytes(audio_chunks)).decode("utf-8")
+        return TextToSpeechResponse(
+            success=True,
+            audio_base64=audio_b64,
+            audio_format="mp3",
         )
 
     # ── Google TTS ─────────────────────────────────────────

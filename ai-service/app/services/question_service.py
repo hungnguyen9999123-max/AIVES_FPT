@@ -62,13 +62,12 @@ class QuestionService:
             else "Chưa có"
         )
 
-        system_prompt = _QUESTION_PROMPT_TEMPLATE.format(
-            course_name=request.course_name,
-            document_context=document_context,
-            question_index=request.question_index,
-            total_questions=request.total_questions,
-            already_asked_topics=already_asked,
-        )
+        system_prompt = _QUESTION_PROMPT_TEMPLATE
+        system_prompt = system_prompt.replace("{course_name}", request.course_name)
+        system_prompt = system_prompt.replace("{document_context}", document_context)
+        system_prompt = system_prompt.replace("{question_index}", str(request.question_index))
+        system_prompt = system_prompt.replace("{total_questions}", str(request.total_questions))
+        system_prompt = system_prompt.replace("{already_asked_topics}", already_asked)
 
         user_message = (
             f"Hãy tạo câu hỏi số {request.question_index} "
