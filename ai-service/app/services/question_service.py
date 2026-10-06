@@ -13,14 +13,31 @@ from loguru import logger
 from app.core.ai_client import BaseAIClient, get_ai_client
 from app.models.request import GenerateQuestionRequest, DocumentContext
 from app.models.response import GenerateQuestionResponse
+from app.services.markdown_processor import MarkdownProcessor
 
 # Load prompt template once at module level
 _PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "question_prompt.txt"
 _QUESTION_PROMPT_TEMPLATE: str = _PROMPT_PATH.read_text(encoding="utf-8")
 
+# Shared MarkdownProcessor instance (stateless, safe to reuse)
+_md_processor = MarkdownProcessor()
+
 
 def _build_document_context(documents: List[DocumentContext]) -> str:
-    """Format the list of .md documents into a single context string for the prompt."""
+    """
+    Process and normalise .md documents using MarkdownProcessor,
+    then return the assembled context string for AI prompts.
+    Falls back to raw content joining if processing fails.
+    """
+    result = _md_processor.process(documents)
+    if result.is_valid and result.context_string:
+        return result.context_string
+
+    # Fallback: join raw content (original behaviour)
+    logger.warning(
+        "[QuestionService] MarkdownProcessor validation failed; "
+        f"errors={result.validation_errors}. Using raw content fallback."
+    )
     parts = []
     for doc in documents:
         parts.append(
