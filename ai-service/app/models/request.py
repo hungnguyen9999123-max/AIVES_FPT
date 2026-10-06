@@ -3,6 +3,9 @@ AIVES AI Service - Request Models
 Pydantic schemas for all incoming API requests from the Backend.
 """
 
+# NOTE: ProcessMarkdownRequest lives at the bottom of this file.
+# It depends on DocumentContext defined above.
+
 from typing import List, Optional
 from pydantic import BaseModel, Field
 
@@ -158,4 +161,28 @@ class EvaluateSessionRequest(BaseModel):
     )
     max_score_per_question: float = Field(
         default=10.0, ge=0, description="Max score per question"
+    )
+
+
+# ─────────────────────────────────────────────
+#  Markdown Processing
+# ─────────────────────────────────────────────
+
+
+class ProcessMarkdownRequest(BaseModel):
+    """
+    Request to explicitly process and normalise 2 .md documents
+    (course_content + learning_outcomes) into a structured AI context.
+
+    Clients (Backend) can call POST /ai/markdown/process to:
+      - Validate that both required document types are present.
+      - Receive the assembled context string used in AI prompts.
+      - Inspect extracted headings, LOs, and topics for debugging.
+    """
+
+    course_name: str = Field(..., description="Name of the course")
+    documents: List[DocumentContext] = Field(
+        ...,
+        description="Exactly 2 documents: one 'course_content', one 'learning_outcomes'",
+        min_length=1,
     )
