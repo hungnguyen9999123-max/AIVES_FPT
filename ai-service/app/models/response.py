@@ -190,3 +190,64 @@ class HealthResponse(BaseModel):
     ai_provider: Optional[str] = None
     stt_provider: Optional[str] = None
     tts_provider: Optional[str] = None
+
+
+# ─────────────────────────────────────────────
+#  Markdown Processing
+# ─────────────────────────────────────────────
+
+
+class DocumentProcessingSummary(BaseModel):
+    """Summary of a single processed .md document."""
+
+    document_id: str = Field(..., description="UUID of the MarkdownDocument")
+    title: str = Field(..., description="Document title")
+    document_type: str = Field(..., description="'course_content' | 'learning_outcomes'")
+
+    raw_char_count: int = Field(..., ge=0, description="Original character count")
+    clean_char_count: int = Field(
+        ..., ge=0, description="Character count after markdown cleaning"
+    )
+    heading_count: int = Field(..., ge=0, description="Number of headings extracted")
+    headings: List[str] = Field(
+        default_factory=list, description="Extracted heading texts (level-aware)"
+    )
+    learning_outcomes: List[str] = Field(
+        default_factory=list,
+        description="Extracted learning outcome items (LO doc only)",
+    )
+    key_topics: List[str] = Field(
+        default_factory=list,
+        description="Bullet/numbered list items extracted as key topics",
+    )
+    is_valid: bool = Field(..., description="Whether this document passed validation")
+    validation_errors: List[str] = Field(
+        default_factory=list,
+        description="Per-document validation warnings/errors",
+    )
+
+
+class ProcessMarkdownResponse(BaseResponse):
+    """
+    Response from POST /ai/markdown/process.
+    Returns the assembled context string + per-document metadata.
+    """
+
+    course_name: str = Field(..., description="Name of the course processed")
+    is_valid: bool = Field(
+        ..., description="True if all documents passed validation"
+    )
+    validation_errors: List[str] = Field(
+        default_factory=list,
+        description="Global validation errors (e.g. missing document type)",
+    )
+    documents: List[DocumentProcessingSummary] = Field(
+        ..., description="Per-document processing summaries"
+    )
+    context_string: str = Field(
+        ...,
+        description=(
+            "Fully assembled, normalised context string ready for AI prompts. "
+            "Inserted as {document_context} in prompt templates."
+        ),
+    )
