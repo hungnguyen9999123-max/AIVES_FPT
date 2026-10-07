@@ -105,11 +105,12 @@ class MockAIClient(BaseAIClient):
 
 class GeminiAIClient(BaseAIClient):
     """
-    Google Gemini API client.
+    Google Gemini API client (Interactions endpoint, auth-key compatible).
     Set AI_PROVIDER=gemini and GEMINI_API_KEY in .env to use.
     """
 
-    BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+    BASE_URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
+    API_REVISION = "2026-05-20"
 
     def __init__(self) -> None:
         self.api_key = settings.gemini_api_key
@@ -118,27 +119,46 @@ class GeminiAIClient(BaseAIClient):
             raise ValueError("GEMINI_API_KEY is not set in environment variables.")
 
     async def complete(self, system_prompt: str, user_message: str) -> str:
-        url = f"{self.BASE_URL}/{self.model}:generateContent?key={self.api_key}"
-        payload = {
-            "system_instruction": {"parts": [{"text": system_prompt}]},
-            "contents": [{"role": "user", "parts": [{"text": user_message}]}],
-            "generationConfig": {
-                "temperature": 0.7,
-                "maxOutputTokens": 2048,
-                "responseMimeType": "application/json",
-            },
+        import asyncio
+
+        headers = {
+            "x-goog-api-key": self.api_key,
+            "Api-Revision": self.API_REVISION,
+            "Content-Type": "application/json",
         }
+        combined_input = f"{system_prompt}\n\n---\n\n{user_message}"
+        payload = {"model": self.model, "input": combined_input}
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(url, json=payload)
-            response.raise_for_status()
-            data = response.json()
+        last_exc: Exception | None = None
+        for attempt in range(5):
+            try:
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    response = await client.post(self.BASE_URL, headers=headers, json=payload)
+                    response.raise_for_status()
+                    data = response.json()
+                break
+            except httpx.HTTPStatusError as exc:
+                last_exc = exc
+                if exc.response.status_code in (429, 500, 502, 503, 504) and attempt < 4:
+                    await asyncio.sleep(3 * (2 ** attempt))
+                    continue
+                raise
+        else:
+            raise ValueError(f"Gemini API failed after retries: {last_exc}") from last_exc
 
-        try:
-            return data["candidates"][0]["content"]["parts"][0]["text"]
-        except (KeyError, IndexError) as exc:
-            logger.error(f"[GeminiAIClient] Unexpected response structure: {data}")
-            raise ValueError("Failed to parse Gemini response.") from exc
+        texts = []
+        for step in data.get("steps", []):
+            if step.get("type") == "model_output":
+                for part in step.get("content", []):
+                    if part.get("type") == "text":
+                        texts.append(part.get("text", ""))
+        raw = "".join(texts).strip()
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[1] if "\n" in raw else raw[3:]
+            if raw.endswith("```"):
+                raw = raw[:-3]
+            raw = raw.strip()
+        return raw
 
 
 # ─────────────────────────────────────────────
