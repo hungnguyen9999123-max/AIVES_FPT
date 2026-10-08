@@ -87,4 +87,73 @@ public class AuthController : ControllerBase
     {
         return Ok(new { message = "Logged out successfully." });
     }
+
+    /// <summary>
+    /// Admin tạo user với role tuỳ chọn (ADMIN, TEACHER, STUDENT).
+    /// Chỉ user có role ADMIN mới được gọi endpoint này.
+    /// </summary>
+    [HttpPost("admin/create-user")]
+    [Authorize(Roles = "ADMIN")]
+    [ProducesResponseType(typeof(UserDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> CreateUserWithRole([FromBody] CreateUserWithRoleRequest request)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        try
+        {
+            var user = await _authService.CreateUserWithRoleAsync(request);
+            return StatusCode(StatusCodes.Status201Created, user);
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("already exists"))
+        {
+            return Conflict(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Lấy toàn bộ danh sách user — public, không cần token.
+    /// Dùng để xem userId/email của admin trước khi login.
+    /// </summary>
+    [HttpGet("admin/users")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(IEnumerable<UserDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAllUsers()
+    {
+        var users = await _authService.GetAllUsersAsync();
+        return Ok(users);
+    }
+
+    /// <summary>Admin cập nhật thông tin user, bao gồm đổi role.</summary>
+    [HttpPut("admin/users/{id:int}")]
+    [Authorize(Roles = "ADMIN")]
+    [ProducesResponseType(typeof(UserDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> UpdateUser(int id, [FromBody] UpdateUserWithRoleRequest request)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        try
+        {
+            var user = await _authService.UpdateUserAsync(id, request);
+            return Ok(user);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
+    }
 }
