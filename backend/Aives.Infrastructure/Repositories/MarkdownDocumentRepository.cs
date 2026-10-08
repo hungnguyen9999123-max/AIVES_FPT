@@ -1,3 +1,4 @@
+using Aives.Application.Exams.Interfaces;
 using Aives.Application.Interfaces.Repositories;
 using Aives.Domain.Entities;
 using Aives.Domain.Enums;
