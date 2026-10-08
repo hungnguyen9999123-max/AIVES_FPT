@@ -16,13 +16,28 @@ from app.models.response import (
     EvaluateSessionResponse,
     QuestionScoreDetail,
 )
+from app.services.markdown_processor import MarkdownProcessor
 
 _PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "scoring_prompt.txt"
 _SCORING_PROMPT_TEMPLATE: str = _PROMPT_PATH.read_text(encoding="utf-8")
 
+# Shared MarkdownProcessor instance (stateless, safe to reuse)
+_md_processor = MarkdownProcessor()
+
 
 def _build_document_context(documents: List[DocumentContext]) -> str:
-    """Format documents into a context string for the scoring prompt."""
+    """
+    Process and normalise .md documents using MarkdownProcessor.
+    Falls back to raw content joining if processing fails.
+    """
+    result = _md_processor.process(documents)
+    if result.is_valid and result.context_string:
+        return result.context_string
+
+    logger.warning(
+        "[ScoringService] MarkdownProcessor validation failed; "
+        f"errors={result.validation_errors}. Using raw content fallback."
+    )
     parts = []
     for doc in documents:
         parts.append(
@@ -60,13 +75,12 @@ class ScoringService:
         document_context = _build_document_context(request.documents)
         qa = request.question_answer
 
-        system_prompt = _SCORING_PROMPT_TEMPLATE.format(
-            course_name=request.course_name,
-            document_context=document_context,
-            question_text=qa.question_text,
-            student_answer=qa.student_answer,
-            max_score=request.max_score,
-        )
+        system_prompt = _SCORING_PROMPT_TEMPLATE
+        system_prompt = system_prompt.replace("{course_name}", request.course_name)
+        system_prompt = system_prompt.replace("{document_context}", document_context)
+        system_prompt = system_prompt.replace("{question_text}", qa.question_text)
+        system_prompt = system_prompt.replace("{student_answer}", qa.student_answer)
+        system_prompt = system_prompt.replace("{max_score}", str(request.max_score))
 
         user_message = (
             f"Hãy chấm điểm câu trả lời của sinh viên cho câu hỏi này "

@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
-from app.api import interview, speech, evaluation
+from app.api import interview, speech, evaluation, markdown
 from app.models.response import HealthResponse
 
 settings = get_settings()
@@ -86,6 +86,7 @@ def create_app() -> FastAPI:
     app.include_router(interview.router, prefix=api_prefix)
     app.include_router(speech.router, prefix=api_prefix)
     app.include_router(evaluation.router, prefix=api_prefix)
+    app.include_router(markdown.router, prefix=api_prefix)
 
     # ── Health & Root ──────────────────────────────────────
     @app.get(

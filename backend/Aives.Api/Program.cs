@@ -6,6 +6,10 @@ using Microsoft.OpenApi.Models;
 using Npgsql;
 using Aives.Domain.Enums;
 using Aives.Infrastructure.Persistence;
+using Aives.Application.Interfaces.Repositories;
+using Aives.Application.Interfaces.Services;
+using Aives.Infrastructure.Repositories;
+using Aives.Application.Services;
 using Aives.Application.Auth.Interfaces;
 using Aives.Application.Auth.Services;
 using Aives.Infrastructure.Auth;
@@ -22,12 +26,11 @@ var builder = WebApplication.CreateBuilder(args);
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
 var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
-var nullTranslator = new VerbatimNameTranslator();
-dataSourceBuilder.MapEnum<UserRole>("user_role", nameTranslator: nullTranslator);
-dataSourceBuilder.MapEnum<ExamStatus>("exam_status", nameTranslator: nullTranslator);
-dataSourceBuilder.MapEnum<SessionStatus>("session_status", nameTranslator: nullTranslator);
-dataSourceBuilder.MapEnum<SubmissionStatus>("submission_status", nameTranslator: nullTranslator);
-dataSourceBuilder.MapEnum<DocType>("doc_type", nameTranslator: nullTranslator);
+dataSourceBuilder.MapEnum<UserRole>(         "user_role",         new NpgsqlUpperCaseTranslator());
+dataSourceBuilder.MapEnum<ExamStatus>(       "exam_status",       new NpgsqlUpperCaseTranslator());
+dataSourceBuilder.MapEnum<SessionStatus>(    "session_status",    new NpgsqlUpperCaseTranslator());
+dataSourceBuilder.MapEnum<SubmissionStatus>( "submission_status", new NpgsqlUpperCaseTranslator());
+dataSourceBuilder.MapEnum<DocType>(          "doc_type",          new NpgsqlUpperCaseTranslator());
 var dataSource = dataSourceBuilder.Build();
 
 builder.Services.AddDbContext<AivesDbContext>(options =>
@@ -36,9 +39,9 @@ builder.Services.AddDbContext<AivesDbContext>(options =>
 // ──────────────────────────────────────────────
 // 2. JWT Authentication
 // ──────────────────────────────────────────────
-var jwtKey = builder.Configuration["Jwt:Key"]
+var jwtKey      = builder.Configuration["Jwt:Key"]
     ?? throw new InvalidOperationException("Jwt:Key configuration is required.");
-var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "AIVES";
+var jwtIssuer   = builder.Configuration["Jwt:Issuer"]   ?? "AIVES";
 var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "AIVES.Client";
 
 builder.Services
@@ -47,25 +50,26 @@ builder.Services
     {
         options.TokenValidationParameters = new TokenValidationParameters
         {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
+            ValidateIssuer           = true,
+            ValidateAudience         = true,
+            ValidateLifetime         = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = jwtIssuer,
-            ValidAudience = jwtAudience,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+            ValidIssuer              = jwtIssuer,
+            ValidAudience            = jwtAudience,
+            IssuerSigningKey         = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
         };
     });
 
 builder.Services.AddAuthorization();
 
 // ──────────────────────────────────────────────
-// 3. Dependency Injection – Auth
+// 3. Dependency Injection — Auth
 // ──────────────────────────────────────────────
-builder.Services.AddScoped<IAuthService, AuthService>();
-builder.Services.AddScoped<IJwtService, JwtService>();
+builder.Services.AddScoped<IAuthService,    AuthService>();
+builder.Services.AddScoped<IJwtService,     JwtService>();
 builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
-builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<Aives.Application.Auth.Interfaces.IUserRepository,
+                            Aives.Infrastructure.Auth.UserRepository>();
 
 // ──────────────────────────────────────────────
 // 3b. Dependency Injection – Exam & ExamSession
@@ -102,19 +106,18 @@ builder.Services.AddSwaggerGen(options =>
 {
     options.SwaggerDoc("v1", new OpenApiInfo { Title = "AIVES API", Version = "v1" });
 
-    // Enable "Authorize" button in Swagger UI
     var securityScheme = new OpenApiSecurityScheme
     {
-        Name = "Authorization",
-        Description = "Enter: Bearer {your JWT token}",
-        In = ParameterLocation.Header,
-        Type = SecuritySchemeType.Http,
-        Scheme = "bearer",
+        Name         = "Authorization",
+        Description  = "Enter: Bearer {your JWT token}",
+        In           = ParameterLocation.Header,
+        Type         = SecuritySchemeType.Http,
+        Scheme       = "bearer",
         BearerFormat = "JWT",
-        Reference = new OpenApiReference
+        Reference    = new OpenApiReference
         {
             Type = ReferenceType.SecurityScheme,
-            Id = JwtBearerDefaults.AuthenticationScheme
+            Id   = JwtBearerDefaults.AuthenticationScheme
         }
     };
     options.AddSecurityDefinition(JwtBearerDefaults.AuthenticationScheme, securityScheme);
@@ -127,7 +130,16 @@ builder.Services.AddSwaggerGen(options =>
 var app = builder.Build();
 
 // ──────────────────────────────────────────────
-// 5. Middleware pipeline
+// 6. Auto-seed default admin on startup
+// ──────────────────────────────────────────────
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AivesDbContext>();
+    await DatabaseSeeder.SeedAdminAsync(db);
+}
+
+// ──────────────────────────────────────────────
+// 7. Middleware pipeline
 // ──────────────────────────────────────────────
 if (app.Environment.IsDevelopment())
 {
@@ -136,37 +148,23 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
-// Authentication MUST come before Authorization
 app.UseAuthentication();
 app.UseAuthorization();
-
 app.MapControllers();
 
-// Health check endpoint (preserved from original)
 app.MapGet("/api/health/db", async (AivesDbContext db) =>
 {
-    var canConnect = await db.Database.CanConnectAsync();
-    var userCount = await db.Users.CountAsync();
+    var canConnect  = await db.Database.CanConnectAsync();
+    var userCount   = await db.Users.CountAsync();
     var courseCount = await db.Courses.CountAsync();
     return Results.Ok(new
     {
-        Status = "Healthy",
+        Status            = "Healthy",
         DatabaseConnected = canConnect,
-        UserCount = userCount,
-        CourseCount = courseCount,
-        ServerTime = DateTime.UtcNow
+        UserCount         = userCount,
+        CourseCount       = courseCount,
+        ServerTime        = DateTime.UtcNow
     });
 });
 
 app.Run();
-
-/// <summary>
-/// Name translator that keeps C# enum member names verbatim (no snake_case conversion).
-/// Required because the PostgreSQL user_role enum stores uppercase values: ADMIN, TEACHER, STUDENT.
-/// </summary>
-class VerbatimNameTranslator : Npgsql.INpgsqlNameTranslator
-{
-    public string TranslateMemberName(string clrName) => clrName;
-    public string TranslateTypeName(string clrName) => clrName;
-}

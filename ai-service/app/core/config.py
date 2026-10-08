@@ -33,13 +33,14 @@ class Settings(BaseSettings):
     # --- AI Provider ---
     ai_provider: str = Field(default="mock", alias="AI_PROVIDER")
     gemini_api_key: str = Field(default="", alias="GEMINI_API_KEY")
-    gemini_model: str = Field(default="gemini-2.0-flash", alias="GEMINI_MODEL")
+    gemini_model: str = Field(default="gemini-3.1-flash-lite", alias="GEMINI_MODEL")
     openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
     openai_model: str = Field(default="gpt-4o-mini", alias="OPENAI_MODEL")
 
     # --- STT ---
     stt_provider: str = Field(default="mock", alias="STT_PROVIDER")
     google_stt_api_key: str = Field(default="", alias="GOOGLE_STT_API_KEY")
+    faster_whisper_model: str = Field(default="base", alias="FASTER_WHISPER_MODEL")
 
     # --- TTS ---
     tts_provider: str = Field(default="mock", alias="TTS_PROVIDER")
