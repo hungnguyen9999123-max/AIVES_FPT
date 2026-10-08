@@ -6,60 +6,31 @@ namespace Aives.Infrastructure.Persistence;
 
 public static class DatabaseSeeder
 {
+    private const string AdminUsername = "admin";
+    private const string AdminEmail    = "admin@aives.edu.vn";
+    private const string AdminPassword = "Admin@123";
+
     /// <summary>
-    /// Seeds a teacher account and two sample courses for testing the markdown upload feature.
-    /// Idempotent — safe to call multiple times; skips data that already exists.
+    /// Tự động seed 1 admin mặc định khi app khởi động.
+    /// Idempotent — bỏ qua nếu username đã tồn tại.
+    /// Credentials: email=admin@aives.edu.vn / password=Admin@123
     /// </summary>
-    public static async Task SeedAsync(AivesDbContext db, string hashPassword)
+    public static async Task SeedAdminAsync(AivesDbContext db)
     {
-        // ------------------------------------------------------------------ //
-        //  1. Teacher account                                                  //
-        // ------------------------------------------------------------------ //
-        const string teacherUsername = "teacher_test";
+        var exists = await db.Users.AnyAsync(u => u.Username == AdminUsername);
+        if (exists) return;
 
-        var teacher = await db.Users
-            .FirstOrDefaultAsync(u => u.Username == teacherUsername);
-
-        if (teacher is null)
+        var admin = new User
         {
-            teacher = new User
-            {
-                Username   = teacherUsername,
-                FullName   = "Nguyễn Văn Giảng",
-                Email      = "teacher_test@aives.edu.vn",
-                PasswordHash = hashPassword,
-                Role       = UserRole.TEACHER,
-                CreatedAt  = DateTime.UtcNow
-            };
-            db.Users.Add(teacher);
-            await db.SaveChangesAsync(); // flush to get UserId
-        }
-
-        // ------------------------------------------------------------------ //
-        //  2. Courses (assign teacher as both TeacherId and CreatedBy)         //
-        // ------------------------------------------------------------------ //
-        var coursesToSeed = new[]
-        {
-            new { Code = "CS101", Name = "Nhập môn Lập trình" },
-            new { Code = "SE201", Name = "Kỹ nghệ Phần mềm" }
+            Username     = AdminUsername,
+            FullName     = "System Admin",
+            Email        = AdminEmail,
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(AdminPassword, workFactor: 12),
+            Role         = UserRole.ADMIN,
+            CreatedAt    = DateTime.UtcNow
         };
 
-        foreach (var c in coursesToSeed)
-        {
-            var exists = await db.Courses.AnyAsync(x => x.CourseCode == c.Code);
-            if (!exists)
-            {
-                db.Courses.Add(new Course
-                {
-                    CourseCode = c.Code,
-                    CourseName = c.Name,
-                    TeacherId  = teacher.UserId,
-                    CreatedBy  = teacher.UserId,
-                    CreatedAt  = DateTime.UtcNow
-                });
-            }
-        }
-
+        db.Users.Add(admin);
         await db.SaveChangesAsync();
     }
 }

@@ -1,53 +1,127 @@
+using System.Text;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 using Npgsql;
-using BCrypt.Net;
 using Aives.Domain.Enums;
 using Aives.Infrastructure.Persistence;
 using Aives.Application.Interfaces.Repositories;
 using Aives.Application.Interfaces.Services;
 using Aives.Infrastructure.Repositories;
 using Aives.Application.Services;
+using Aives.Application.Auth.Interfaces;
+using Aives.Application.Auth.Services;
+using Aives.Infrastructure.Auth;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Register DbContext with Neon PostgreSQL and Postgres enum mappings
+// ──────────────────────────────────────────────
+// 1. PostgreSQL / EF Core
+// ──────────────────────────────────────────────
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
 var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
-
-// Map C# enum values → PostgreSQL enum labels (uppercase, matching DB schema)
-dataSourceBuilder.MapEnum<UserRole>(     "user_role",        new NpgsqlUpperCaseTranslator());
-dataSourceBuilder.MapEnum<ExamStatus>(   "exam_status",      new NpgsqlUpperCaseTranslator());
-dataSourceBuilder.MapEnum<SessionStatus>("session_status",   new NpgsqlUpperCaseTranslator());
-dataSourceBuilder.MapEnum<SubmissionStatus>("submission_status", new NpgsqlUpperCaseTranslator());
-dataSourceBuilder.MapEnum<DocType>(      "doc_type",         new NpgsqlUpperCaseTranslator());
+dataSourceBuilder.MapEnum<UserRole>(         "user_role",         new NpgsqlUpperCaseTranslator());
+dataSourceBuilder.MapEnum<ExamStatus>(       "exam_status",       new NpgsqlUpperCaseTranslator());
+dataSourceBuilder.MapEnum<SessionStatus>(    "session_status",    new NpgsqlUpperCaseTranslator());
+dataSourceBuilder.MapEnum<SubmissionStatus>( "submission_status", new NpgsqlUpperCaseTranslator());
+dataSourceBuilder.MapEnum<DocType>(          "doc_type",          new NpgsqlUpperCaseTranslator());
 var dataSource = dataSourceBuilder.Build();
 
 builder.Services.AddDbContext<AivesDbContext>(options =>
     options.UseNpgsql(dataSource));
 
-// ------------------------------------------------------------------ //
-//  Repositories (Infrastructure)                                       //
-// ------------------------------------------------------------------ //
-builder.Services.AddScoped<IUserRepository,             UserRepository>();
+// ──────────────────────────────────────────────
+// 2. JWT Authentication
+// ──────────────────────────────────────────────
+var jwtKey      = builder.Configuration["Jwt:Key"]
+    ?? throw new InvalidOperationException("Jwt:Key configuration is required.");
+var jwtIssuer   = builder.Configuration["Jwt:Issuer"]   ?? "AIVES";
+var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "AIVES.Client";
+
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer           = true,
+            ValidateAudience         = true,
+            ValidateLifetime         = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer              = jwtIssuer,
+            ValidAudience            = jwtAudience,
+            IssuerSigningKey         = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+        };
+    });
+
+builder.Services.AddAuthorization();
+
+// ──────────────────────────────────────────────
+// 3. Dependency Injection — Auth
+// ──────────────────────────────────────────────
+builder.Services.AddScoped<IAuthService,    AuthService>();
+builder.Services.AddScoped<IJwtService,     JwtService>();
+builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
+builder.Services.AddScoped<Aives.Application.Auth.Interfaces.IUserRepository,
+                            Aives.Infrastructure.Auth.UserRepository>();
+
+// ──────────────────────────────────────────────
+// 4. Dependency Injection — Admin / Teacher features
+// ──────────────────────────────────────────────
+builder.Services.AddScoped<Aives.Application.Interfaces.Repositories.IUserRepository,
+                            Aives.Infrastructure.Repositories.UserRepository>();
 builder.Services.AddScoped<ICourseRepository,           CourseRepository>();
 builder.Services.AddScoped<IMarkdownDocumentRepository, MarkdownDocumentRepository>();
-
-// ------------------------------------------------------------------ //
-//  Services (Application)                                              //
-// ------------------------------------------------------------------ //
 builder.Services.AddScoped<IUserService,             UserService>();
 builder.Services.AddScoped<ICourseService,           CourseService>();
 builder.Services.AddScoped<IMarkdownDocumentService, MarkdownDocumentService>();
 
-// Add services to the container.
+// ──────────────────────────────────────────────
+// 5. Controllers + Swagger with JWT button
+// ──────────────────────────────────────────────
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new OpenApiInfo { Title = "AIVES API", Version = "v1" });
+
+    var securityScheme = new OpenApiSecurityScheme
+    {
+        Name         = "Authorization",
+        Description  = "Enter: Bearer {your JWT token}",
+        In           = ParameterLocation.Header,
+        Type         = SecuritySchemeType.Http,
+        Scheme       = "bearer",
+        BearerFormat = "JWT",
+        Reference    = new OpenApiReference
+        {
+            Type = ReferenceType.SecurityScheme,
+            Id   = JwtBearerDefaults.AuthenticationScheme
+        }
+    };
+    options.AddSecurityDefinition(JwtBearerDefaults.AuthenticationScheme, securityScheme);
+    options.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        { securityScheme, Array.Empty<string>() }
+    });
+});
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+// ──────────────────────────────────────────────
+// 6. Auto-seed default admin on startup
+// ──────────────────────────────────────────────
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AivesDbContext>();
+    await DatabaseSeeder.SeedAdminAsync(db);
+}
+
+// ──────────────────────────────────────────────
+// 7. Middleware pipeline
+// ──────────────────────────────────────────────
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -55,54 +129,23 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
+app.UseAuthentication();
 app.UseAuthorization();
-
 app.MapControllers();
 
 app.MapGet("/api/health/db", async (AivesDbContext db) =>
 {
-    var canConnect = await db.Database.CanConnectAsync();
-    var userCount = await db.Users.CountAsync();
+    var canConnect  = await db.Database.CanConnectAsync();
+    var userCount   = await db.Users.CountAsync();
     var courseCount = await db.Courses.CountAsync();
     return Results.Ok(new
     {
-        Status = "Healthy",
+        Status            = "Healthy",
         DatabaseConnected = canConnect,
-        UserCount = userCount,
-        CourseCount = courseCount,
-        ServerTime = DateTime.UtcNow
+        UserCount         = userCount,
+        CourseCount       = courseCount,
+        ServerTime        = DateTime.UtcNow
     });
 });
 
-// ------------------------------------------------------------------ //
-//  Seed endpoint — Development only                                    //
-//  POST /api/seed                                                       //
-//  Body (optional JSON): { "password": "your-custom-password" }        //
-// ------------------------------------------------------------------ //
-if (app.Environment.IsDevelopment())
-{
-    app.MapPost("/api/seed", async (AivesDbContext db, SeedRequest? req) =>
-    {
-        // Default password nếu không truyền vào
-        var plainPassword = req?.Password ?? "Teacher@123";
-
-        // Hash password với BCrypt (work factor 12 — đủ mạnh cho dev)
-        var passwordHash = BCrypt.Net.BCrypt.HashPassword(plainPassword, workFactor: 12);
-
-        await DatabaseSeeder.SeedAsync(db, passwordHash);
-
-        return Results.Ok(new
-        {
-            Message  = "Seed completed successfully.",
-            Username = "teacher_test",
-            Password = plainPassword,   // trả về để tiện test — chỉ dùng ở dev
-            Courses  = new[] { "CS101 — Nhập môn Lập trình", "SE201 — Kỹ nghệ Phần mềm" }
-        });
-    });
-}
-
 app.Run();
-
-// Request DTO cho seed endpoint
-record SeedRequest(string? Password);

@@ -1,5 +1,6 @@
 using Aives.Application.DTOs;
 using Aives.Application.Interfaces.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Aives.Api.Controllers;
@@ -10,6 +11,7 @@ namespace Aives.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/admin/courses")]
+[Authorize(Roles = "ADMIN")]
 public class AdminCourseController : ControllerBase
 {
     private readonly ICourseService _courseService;

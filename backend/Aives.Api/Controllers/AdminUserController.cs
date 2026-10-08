@@ -1,6 +1,7 @@
 using Aives.Application.DTOs;
 using Aives.Application.Interfaces.Services;
 using Aives.Domain.Enums;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Aives.Api.Controllers;
@@ -11,6 +12,7 @@ namespace Aives.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/admin/users")]
+[Authorize(Roles = "ADMIN")]
 public class AdminUserController : ControllerBase
 {
     private readonly IUserService _userService;
