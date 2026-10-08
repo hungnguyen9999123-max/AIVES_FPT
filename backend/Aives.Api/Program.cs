@@ -15,7 +15,6 @@ using Aives.Application.Auth.Services;
 using Aives.Infrastructure.Auth;
 using Aives.Application.Exams.Interfaces;
 using Aives.Application.Exams.Services;
-using Aives.Infrastructure.Repositories;
 using Aives.Infrastructure.AI;
 
 var builder = WebApplication.CreateBuilder(args);

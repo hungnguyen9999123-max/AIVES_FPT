@@ -1,5 +1,6 @@
 using Aives.Application.Exams.DTOs;
 using Aives.Application.Exams.Interfaces;
+using Aives.Application.Interfaces.Repositories;
 using Aives.Domain.Entities;
 using Aives.Domain.Enums;
 using Microsoft.AspNetCore.Http;
