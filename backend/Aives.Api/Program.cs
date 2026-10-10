@@ -9,8 +9,7 @@ using Aives.Infrastructure.Persistence;
 using Aives.Application.Interfaces.Repositories;
 using Aives.Application.Interfaces.Services;
 using Aives.Infrastructure.Repositories;
-using Aives.Application.Services;
-using Aives.Application.Auth.Interfaces;
+using Aives.Application.Services;using Aives.Application.Auth.Interfaces;
 using Aives.Application.Auth.Services;
 using Aives.Infrastructure.Auth;
 
@@ -74,9 +73,14 @@ builder.Services.AddScoped<Aives.Application.Interfaces.Repositories.IUserReposi
                             Aives.Infrastructure.Repositories.UserRepository>();
 builder.Services.AddScoped<ICourseRepository,           CourseRepository>();
 builder.Services.AddScoped<IMarkdownDocumentRepository, MarkdownDocumentRepository>();
+builder.Services.AddScoped<IExamRepository,             ExamRepository>();
+builder.Services.AddScoped<IQuestionBankRepository,     QuestionBankRepository>();
+
 builder.Services.AddScoped<IUserService,             UserService>();
 builder.Services.AddScoped<ICourseService,           CourseService>();
 builder.Services.AddScoped<IMarkdownDocumentService, MarkdownDocumentService>();
+builder.Services.AddScoped<IExamHistoryService,      ExamHistoryService>();
+builder.Services.AddScoped<IExamGeneratorService,    ExamGeneratorService>();
 
 // ──────────────────────────────────────────────
 // 5. Controllers + Swagger with JWT button
@@ -111,12 +115,14 @@ builder.Services.AddSwaggerGen(options =>
 var app = builder.Build();
 
 // ──────────────────────────────────────────────
-// 6. Auto-seed default admin on startup
+// 6. Auto-seed on startup
 // ──────────────────────────────────────────────
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AivesDbContext>();
     await DatabaseSeeder.SeedAdminAsync(db);
+    await DatabaseSeeder.SeedQuestionBankAsync(db);
+    await DatabaseSeeder.SeedExamDataAsync(db);
 }
 
 // ──────────────────────────────────────────────
